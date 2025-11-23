@@ -113,6 +113,9 @@ vim.opt.mouse = 'a'
 -- Don't show the mode, since it's already in the status line
 vim.opt.showmode = false
 
+-- augment settings
+-- vim.g.augment_workspace_folders = { '~/development' }
+
 -- Sync clipboard between OS and Neovim.
 --  Schedule the setting after `UiEnter` because it can increase startup-time.
 --  Remove this option if you want your OS clipboard to remain independent.
@@ -207,6 +210,33 @@ vim.api.nvim_create_autocmd('TextYankPost', {
   end,
 })
 
+-- Set autoread to automatically reload files when they change on disk
+vim.opt.autoread = true
+
+-- Create an autocommand group for file change detection
+local file_change_group = vim.api.nvim_create_augroup('FileChangeDetection', { clear = true })
+
+-- Check if files have changed when gaining focus, entering a buffer, or after idle time
+vim.api.nvim_create_autocmd({ 'FocusGained', 'BufEnter', 'CursorHold', 'CursorHoldI' }, {
+  group = file_change_group,
+  callback = function()
+    if vim.api.nvim_get_mode().mode ~= 'c' then
+      vim.cmd 'checktime'
+    end
+  end,
+})
+
+-- Show notification when files have changed on disk
+vim.api.nvim_create_autocmd('FileChangedShellPost', {
+  group = file_change_group,
+  callback = function()
+    vim.api.nvim_echo({ {
+      'File changed on disk. Buffer reloaded.',
+      'WarningMsg',
+    } }, true, {})
+  end,
+})
+
 -- [[ Install `lazy.nvim` plugin manager ]]
 --    See `:help lazy.nvim.txt` or https://github.com/folke/lazy.nvim for more info
 local lazypath = vim.fn.stdpath 'data' .. '/lazy/lazy.nvim'
@@ -218,6 +248,45 @@ if not (vim.uv or vim.loop).fs_stat(lazypath) then
   end
 end ---@diagnostic disable-next-line: undefined-field
 vim.opt.rtp:prepend(lazypath)
+
+local function map(lhs, rhs, opts)
+  vim.keymap.set('n', lhs, rhs, opts or {})
+end
+
+-- Add markdownlint to PATH at Neovim startup
+-- vim.api.nvim_create_autocmd('VimEnter', {
+--   callback = function()
+--     -- Common locations for npm global binaries
+--     local possible_paths = {
+--       vim.fn.expand '~/.npm-global/bin',
+--       vim.fn.expand '~/.nvm/current/bin',
+--       vim.fn.expand '~/node_modules/.bin',
+--       vim.fn.expand '~/.nodenv/shims',
+--       '/usr/local/bin',
+--       '/usr/local/lib/node_modules/.bin',
+--       '/opt/homebrew/bin', -- For macOS with Homebrew
+--     }
+--
+--     -- Find where markdownlint is located
+--     local markdownlint_path = ''
+--     for _, path in ipairs(possible_paths) do
+--       local full_path = path .. '/markdownlint'
+--       if vim.fn.filereadable(full_path) == 1 or vim.fn.filereadable(full_path .. '.cmd') == 1 then
+--         markdownlint_path = path
+--         break
+--       end
+--     end
+--
+--     -- Add path to Neovim's PATH if found
+--     if markdownlint_path ~= '' then
+--       vim.env.PATH = markdownlint_path .. ':' .. (vim.env.PATH or '')
+--       print('Added markdownlint location to PATH: ' .. markdownlint_path)
+--     else
+--       print 'Warning: markdownlint not found in common locations'
+--     end
+--   end,
+--   once = true,
+-- })
 
 -- [[ Configure and install plugins ]]
 --
@@ -841,7 +910,7 @@ require('lazy').setup({
       -- Load the colorscheme here.
       -- Like many other themes, this one has different styles, and you could load
       -- any other, such as 'tokyonight-storm', 'tokyonight-moon', or 'tokyonight-day'.
-      vim.cmd.colorscheme 'tokyonight-night'
+      vim.cmd.colorscheme 'tokyonight-storm'
 
       -- You can configure highlights by doing something like:
       vim.cmd.hi 'Comment gui=none'
@@ -973,9 +1042,6 @@ require('lazy').setup({
       local harpoon = require 'harpoon'
       harpoon:setup()
 
-      local function map(lhs, rhs, opts)
-        vim.keymap.set('n', lhs, rhs, opts or {})
-      end
       map('<leader>A', function()
         harpoon:list():add()
       end)
@@ -993,6 +1059,29 @@ require('lazy').setup({
     end,
   },
 
+  -- {
+  --   'augmentcode/augment.vim',
+  --   config = function()
+  --     map('<leader>ae', function()
+  --       vim.g.augment_enable_completions = 1
+  --       vim.g.augment_disable_completions = 0
+  --     end, { desc = 'Enable augment completions' })
+  --     map('<leader>ad', function()
+  --       vim.g.augment_enable_completions = 0
+  --       vim.g.augment_disable_completions = 1
+  --     end, { desc = 'Disable augment completions' })
+  --     map('<leader>act', function()
+  --       vim.cmd 'Augment chat-toggle'
+  --     end, { desc = 'Toggle Augment Chat Panel' })
+  --     map('<leader>acm', function()
+  --       vim.cmd 'Augment chat'
+  --     end, { desc = 'Send a message to Augment Chat' })
+  --     map('<leader>acn', function()
+  --       vim.cmd 'Augment chat-new'
+  --     end, { desc = 'Create a new Augment Chat' })
+  --   end,
+  -- },
+
   -- The following two comments only work if you have downloaded the kickstart repo, not just copy pasted the
   -- init.lua. If you want these files, they are in the repository, so you can just download them and
   -- place them in the correct locations.
@@ -1004,7 +1093,7 @@ require('lazy').setup({
   --
   -- require 'kickstart.plugins.debug',
   -- require 'kickstart.plugins.indent_line',
-  -- require 'kickstart.plugins.lint',
+  require 'kickstart.plugins.lint',
   -- require 'kickstart.plugins.autopairs',
   require 'kickstart.plugins.neo-tree',
   require 'kickstart.plugins.gitsigns', -- adds gitsigns recommend keymaps
@@ -1024,7 +1113,7 @@ require('lazy').setup({
     end,
     keys = {
       { '<leader>opl', '<cmd>Octo pr list<cr>', desc = 'Octo PR list' },
-      { '<leade>ors', '<cmd>Octo review start<cr>', desc = 'Octo start review' },
+      { '<leader>ors', '<cmd>Octo review start<cr>', desc = 'Octo start review' },
       { '<leader>oca', '<cmd>Octo comment add<cr>', desc = 'Octo add comment' },
     },
   },
